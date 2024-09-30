@@ -157,22 +157,29 @@ pub fn file_header_parser(file: List(Int)) -> Parser(FileHeader) {
 }
 
 pub fn track_parser(file: BitArray) -> Parser(Track) {
-  use chunk1 <- result.try(
+  use _ <- result.try(
     bit_array.slice(file, 0, 4)
-    |> result.map_error(fn(_) { ParserErr("") })
-    |> result.map(fn(bits) {
-      case bits {
-        <<77:8, 84:8, 114:8, 107:8>> -> Ok(bits)
-        _ -> Error(ParserErr("incorrect chunk 1"))
-      }
-    }),
+    |> result.map_error(fn(_) { ParserErr("missing track header") }),
   )
-  use rest <- result.try(
-    bit_array.slice(file, 8, bit_array.byte_size(file))
-    |> result.map_error(fn(_) { ParserErr("") }),
-  )
-  // use parse_events <- result.try(many(track_event_parser(rest)))
-  // Ok(ParserState(parse_events.parsed, parse_events.remaining))
+  use rest <- result.try(fn(b) {
+    case b {
+      <<77:8, 84:8, 114:8, 107:8, rest:bits>> -> Ok(rest)
+      _ -> Error(ParserErr("incorrect chunk 1"))
+    }
+  }(file))
+  many(track_event_parser, rest, list.new())
+}
+
+pub fn many(
+  p: fn(BitArray) -> Parser(EventWTime),
+  b: BitArray,
+  z: Track,
+) -> Parser(Track) {
+  let m_e = p(b)
+  case m_e {
+    Error(_) -> Ok(ParserState(z, b))
+    Ok(state) -> many(p, state.remaining, list.append(z, [state.parsed]))
+  }
 }
 
 pub fn track_event_parser(file: BitArray) -> Parser(EventWTime) {
@@ -274,7 +281,12 @@ pub fn midi_event_parser(b: BitArray) -> Parser(MidiEvent) {
 }
 
 pub fn sys_ex_parser(b: BitArray) -> Parser(MetaEvent) {
-  todo
+  use l <- result.try(vari_len_parser(b))
+  use rest <- result.try(
+    bit_array.slice(l.remaining, l.parsed, bit_array.byte_size(l.remaining))
+    |> result.map_error(fn(_) { ParserErr("error slicing sys_ex event") }),
+  )
+  Ok(ParserState(UnknownMeta, rest))
 }
 
 pub fn vari_len_parser(file: BitArray) -> Parser(Int) {
