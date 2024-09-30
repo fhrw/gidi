@@ -99,3 +99,40 @@ pub fn meta_event_parser_test() {
   gidi.meta_event_parser(<<47:8, 0:8, 1:8>>)
   |> should.equal(Ok(gidi.ParserState(gidi.EndOfTrack, <<1:8>>)))
 }
+
+pub fn track_parser_test() {
+  gidi.track_parser(<<>>)
+  |> should.equal(Error(gidi.ParserErr("missing track header")))
+  gidi.track_parser(<<77:8, 84:8, 114:8, 106:8, 0:8>>)
+  |> should.equal(Error(gidi.ParserErr("incorrect chunk 1")))
+  gidi.track_parser(<<77:8, 84:8, 114:8, 106:8>>)
+  |> should.equal(Error(gidi.ParserErr("incorrect chunk 1")))
+  gidi.track_parser(<<77:8, 84:8, 114:8, 107:8>>)
+  |> should.equal(Ok(gidi.ParserState([], <<>>)))
+
+  // add some events here going to bed
+  gidi.track_parser(<<77:8, 84:8, 114:8, 107:8, 0:1, 0:7, 255:8, 0:8, 1:8>>)
+  |> should.equal(
+    Ok(
+      gidi.ParserState(
+        [gidi.EventWTime(gidi.MetaEvent(gidi.SeqNum(1)), 0)],
+        <<>>,
+      ),
+    ),
+  )
+  gidi.track_parser(<<
+    77:8, 84:8, 114:8, 107:8, 0:1, 0:7, 255:8, 0:8, 1:8, 0:1, 0:7, 255:8, 0:8,
+    1:8,
+  >>)
+  |> should.equal(
+    Ok(
+      gidi.ParserState(
+        [
+          gidi.EventWTime(gidi.MetaEvent(gidi.SeqNum(1)), 0),
+          gidi.EventWTime(gidi.MetaEvent(gidi.SeqNum(1)), 0),
+        ],
+        <<>>,
+      ),
+    ),
+  )
+}
